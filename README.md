@@ -5,7 +5,9 @@ Home Assistant add-on repository of ASKÖ Linz-Stamm.
 - **SmartStamm Netzmessung**: hourly Speedtest.net (official Ookla CLI against a fixed server, default LIWEST Linz) and hourly RTR-Netztest (RMBT client of the Austrian regulator), each reported as Home Assistant sensors. See `netzmessung/DOCS.md`.
 
 Add this repository in Home Assistant under Settings → Add-ons → Add-on store → ⋮ → Repositories:
-`https://github.com/flowsworld/smartstamm-addons`
+`https://github.com/askoe-linz-stamm/smartstamm-addons`
+
+The existing SmartStamm installation keeps its original `https://github.com/flowsworld/smartstamm-addons` store entry. GitHub redirects that address after the transfer. Removing and adding the repository under the new address would change the repository ID and the installed add-on slug used by Home Assistant scripts.
 
 ## Building
 
