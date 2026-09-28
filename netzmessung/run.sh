@@ -21,7 +21,7 @@ API="http://supervisor/core/api"
 
 # Measurement clients, downloaded once into /data/bin (see install_clients).
 OOKLA_VERSION=1.2.0
-RMBT_RELEASE=rmbt-client-cb87ff8   # tag in flowsworld/smartstamm-addons, built from open-rmbt-client-cli commit cb87ff88235a2b075d61c9a57e36a2fa332aaf11
+RMBT_RELEASE=rmbt-client-cb87ff8   # tag in askoe-linz-stamm/smartstamm-addons, built from open-rmbt-client-cli commit cb87ff88235a2b075d61c9a57e36a2fa332aaf11
 RMBT_SHA256=1dadffcec7c2b7546f5b54f46e30d04fcae33a5b64c397b0f63833bda76f2ba4
 
 # Publish one sensor state. $1 entity id, $2 state, $3 attributes JSON object.
@@ -57,7 +57,7 @@ install_clients() {
   fi
   if [ ! -x "${BIN}/rmbt-client" ] || [ "$(cat "${BIN}/rmbt-client.version" 2>/dev/null)" != "${RMBT_RELEASE}" ]; then
     bashio::log.info "Downloading RMBT client ${RMBT_RELEASE} for ${arch}"
-    fetch_verified "https://github.com/flowsworld/smartstamm-addons/releases/download/${RMBT_RELEASE}/rmbt-client-${arch}" "${BIN}/rmbt-client" "${RMBT_SHA256}" \
+    fetch_verified "https://github.com/askoe-linz-stamm/smartstamm-addons/releases/download/${RMBT_RELEASE}/rmbt-client-${arch}" "${BIN}/rmbt-client" "${RMBT_SHA256}" \
       && echo "${RMBT_RELEASE}" > "${BIN}/rmbt-client.version" || { bashio::log.error "RMBT client download failed"; return 1; }
   fi
 }

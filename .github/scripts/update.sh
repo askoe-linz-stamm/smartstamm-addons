@@ -11,7 +11,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 ADDON=netzmessung
 RUN_SH="${ADDON}/run.sh"; BUILD_YAML="${ADDON}/build.yaml"; CONFIG="${ADDON}/config.yaml"; CHANGELOG="${ADDON}/CHANGELOG.md"
-REPO="${GITHUB_REPOSITORY:-flowsworld/smartstamm-addons}"
+REPO="${GITHUB_REPOSITORY:-askoe-linz-stamm/smartstamm-addons}"
 RMBT_REPO=rtr-nettest/open-rmbt-client-cli
 changes=()
 
