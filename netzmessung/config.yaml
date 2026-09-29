@@ -1,5 +1,5 @@
 name: SmartStamm Netzmessung
-version: "2026.9.28"
+version: "2026.9.29"
 slug: netzmessung
 description: Scheduled internet speed measurements (Speedtest.net via Ookla CLI, RTR-Netztest via RMBT client) reported as Home Assistant sensors
 url: https://github.com/askoe-linz-stamm/smartstamm-addons/tree/main/netzmessung

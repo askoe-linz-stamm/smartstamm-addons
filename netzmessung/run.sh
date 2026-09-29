@@ -34,9 +34,15 @@ publish() {
     || bashio::log.warning "Publishing ${entity} failed"
 }
 
-set_status() {   # $1 entity, $2 friendly name, $3 state, $4 message
-  publish "$1" "$3" "$(jq -cn --arg n "$2" --arg m "$4" --arg t "$(date -Iseconds)" \
-    '{friendly_name:$n, icon:"mdi:speedometer", message:$m, updated:$t}')"
+# Consecutive failed runs per measurement. Together with a stable error code on
+# the status sensor, SmartStamm turns lasting failures into GitHub issues.
+SPEEDTEST_FAILS=0
+RTR_FAILS=0
+
+set_status() {   # $1 entity, $2 friendly name, $3 state, $4 message, on errors $5 code and $6 failed runs
+  publish "$1" "$3" "$(jq -cn --arg n "$2" --arg m "$4" --arg t "$(date -Iseconds)" --arg c "${5:-}" --arg f "${6:-0}" \
+    '{friendly_name:$n, icon:"mdi:speedometer", message:$m, updated:$t}
+     + (if $c == "" then {} else {error_code:$c, failed_runs:($f | tonumber)} end)')"
 }
 
 # Download a file and check its SHA-256. $1 url, $2 target, $3 expected sha256
@@ -78,7 +84,8 @@ run_speedtest() {
   fi
   if [ -z "${json}" ]; then
     bashio::log.error "Speedtest.net: measurement failed on server ${used}"
-    set_status sensor.speedtest_status "Speedtest.net Status" error "Messung gegen Server ${used} fehlgeschlagen"
+    SPEEDTEST_FAILS=$((SPEEDTEST_FAILS + 1))
+    set_status sensor.speedtest_status "Speedtest.net Status" error "Messung gegen Server ${used} fehlgeschlagen" measurement-failed "${SPEEDTEST_FAILS}"
     return 1
   fi
   # bandwidth is bytes/s in the CLI output; sensors report Mbit/s
@@ -86,6 +93,13 @@ run_speedtest() {
   down=$(echo "${json}" | jq -r '(.download.bandwidth * 8 / 1000000 * 100 | round) / 100')
   up=$(echo "${json}" | jq -r '(.upload.bandwidth * 8 / 1000000 * 100 | round) / 100')
   ping=$(echo "${json}" | jq -r '(.ping.latency * 10 | round) / 10')
+  if ! [[ "${down}" =~ ^[0-9.]+$ && "${up}" =~ ^[0-9.]+$ && "${ping}" =~ ^[0-9.]+$ ]]; then
+    bashio::log.error "Speedtest.net: unexpected result format"
+    SPEEDTEST_FAILS=$((SPEEDTEST_FAILS + 1))
+    set_status sensor.speedtest_status "Speedtest.net Status" error "Ergebnis nicht lesbar" result-format "${SPEEDTEST_FAILS}"
+    return 1
+  fi
+  SPEEDTEST_FAILS=0
   local common; common=$(echo "${json}" | jq -c --arg t "$(date -Iseconds)" '{
     server_name: .server.name, server_location: .server.location, server_country: .server.country,
     server_id: (.server.id | tostring), server_host: .server.host, isp: .isp,
@@ -105,7 +119,8 @@ run_rtr() {
   out=$(timeout 300 "${BIN}/rmbt-client" --host "${RTR_CONTROL}" --type CLI --platform Linux --model "${RTR_MODEL}" --nettype 98 2>&1); rc=$?
   if [ $rc -ne 0 ]; then
     bashio::log.error "RTR-Netztest: client exited with ${rc}: $(echo "${out}" | tail -3 | tr '\n' ' ')"
-    set_status sensor.rtr_netztest_status "RTR-Netztest Status" error "Client-Fehler ${rc}: $(echo "${out}" | grep -iE 'error|failed' | tail -1)"
+    RTR_FAILS=$((RTR_FAILS + 1))
+    set_status sensor.rtr_netztest_status "RTR-Netztest Status" error "Client-Fehler ${rc}: $(echo "${out}" | grep -iE 'error|failed' | tail -1)" client-exit "${RTR_FAILS}"
     return 1
   fi
   # parse the "=== Results ===" block of the client output
@@ -120,9 +135,11 @@ run_rtr() {
   threads=$(echo "${out}" | awk '/^Download:/{for(i=1;i<=NF;i++) if($i ~ /^thread/) print $(i-1)}' | head -1)
   if [ -z "${down}" ] || [ -z "${up}" ] || [ -z "${ping_med}" ]; then
     bashio::log.error "RTR-Netztest: could not parse results: $(echo "${out}" | tail -8 | tr '\n' ' ')"
-    set_status sensor.rtr_netztest_status "RTR-Netztest Status" error "Ergebnis nicht lesbar"
+    RTR_FAILS=$((RTR_FAILS + 1))
+    set_status sensor.rtr_netztest_status "RTR-Netztest Status" error "Ergebnis nicht lesbar" result-format "${RTR_FAILS}"
     return 1
   fi
+  RTR_FAILS=0
   local common; common=$(jq -cn --arg srv "${server}" --arg url "${share}" --arg t "$(date -Iseconds)" --arg th "${threads:-}" \
     '{server:$srv, share_url:$url, measured_at:$t, threads:$th, attribution:"RTR-Netztest (RMBT), RTR-GmbH"}')
   publish sensor.rtr_netztest_download "${down}" "$(echo "${common}" | jq -c '. + {friendly_name:"RTR-Netztest Download", unit_of_measurement:"Mbit/s", device_class:"data_rate", state_class:"measurement", icon:"mdi:download-network"}')"
