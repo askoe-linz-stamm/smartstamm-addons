@@ -9,6 +9,10 @@ Add this repository in Home Assistant under Settings → Add-ons → Add-on stor
 
 The existing SmartStamm installation keeps its original `https://github.com/flowsworld/smartstamm-addons` store entry. GitHub redirects that address after the transfer. Removing and adding the repository under the new address would change the repository ID and the installed add-on slug used by Home Assistant scripts.
 
+## Error reports
+
+On errors the status sensors (`sensor.speedtest_status`, `sensor.rtr_netztest_status`) carry `error_code` (`measurement-failed`, `client-exit`, `result-format`) and `failed_runs`. SmartStamm turns lasting failures into issues labelled `automatisch` here. A failed run of the update workflow opens such an issue itself (or comments on the open one) using the workflow's `GITHUB_TOKEN`.
+
 ## Building
 
 There is no prebuilt image: the Supervisor builds the add-on on the device (the Dockerfile only runs `apk upgrade` and adds the run script). Both measurement clients are downloaded at first start. Test locally with

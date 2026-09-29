@@ -11,6 +11,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  issues: write   # failure report below
 concurrency:
   group: update-netzmessung
   cancel-in-progress: false
@@ -24,3 +25,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: .github/scripts/update.sh
+      # A failed run opens one issue labelled `automatisch`; later failures comment on it.
+      - name: Report failure as issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Update-Workflow netzmessung fehlgeschlagen"
+          open=$(gh issue list --label automatisch --state open --search "in:title \"${title}\"" --json number --jq '.[0].number')
+          if [ -n "${open}" ]; then
+            gh issue comment "${open}" --body "Erneut fehlgeschlagen: ${RUN_URL}"
+          else
+            gh issue create --label automatisch --title "${title}" --body "Der geplante Update-Workflow ist fehlgeschlagen: ${RUN_URL}
+
+          Das Add-on auf SmartStamm läuft mit der letzten Version weiter. Log des Laufs prüfen; das Skript lässt sich lokal mit \`DRY_RUN=1\` testen (siehe README)."
+          fi

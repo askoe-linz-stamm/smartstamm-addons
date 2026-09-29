@@ -1,3 +1,8 @@
+## 2026.9.29
+
+- Status sensors carry `error_code` (`measurement-failed`, `client-exit`, `result-format`) and `failed_runs` on errors, so SmartStamm can report lasting failures as GitHub issues.
+- Speedtest.net results with an unexpected format are reported as errors instead of publishing empty values.
+
 ## 2026.9.28
 
 - Scheduled rebuild: Alpine packages of the base image refreshed (`apk upgrade`), no upstream changes.
