@@ -1,5 +1,5 @@
 name: SmartStamm Netzmessung
-version: "2026.9.29"
+version: "2026.10.1"
 slug: netzmessung
 description: Scheduled internet speed measurements (Speedtest.net via Ookla CLI, RTR-Netztest via RMBT client) reported as Home Assistant sensors
 url: https://github.com/askoe-linz-stamm/smartstamm-addons/tree/main/netzmessung
@@ -12,17 +12,31 @@ homeassistant_api: true
 stdin: true
 options:
   speedtest_minute: 0
+  speedtest_interval: 1
+  speedtest_interval_unit: hours
+  speedtest_hour: 0
   speedtest_server_id: 818
   speedtest_fallback_server_id: 73500
   rtr_minute: 30
+  rtr_interval: 1
+  rtr_interval_unit: hours
+  rtr_hour: 0
   rtr_control_server: https://c01.netztest.at
   rtr_model: Home Assistant Green
   run_on_start: true
+  jitter_minutes: 3
 schema:
   speedtest_minute: int(0,59)?
+  speedtest_interval: int(1,365)?
+  speedtest_interval_unit: list(hours|days)?
+  speedtest_hour: int(0,23)?
   speedtest_server_id: int
   speedtest_fallback_server_id: int?
   rtr_minute: int(0,59)?
+  rtr_interval: int(1,365)?
+  rtr_interval_unit: list(hours|days)?
+  rtr_hour: int(0,23)?
   rtr_control_server: url
   rtr_model: str
   run_on_start: bool
+  jitter_minutes: int(0,15)?

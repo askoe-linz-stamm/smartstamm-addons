@@ -8,6 +8,7 @@ FROM ${BUILD_FROM}
 # add-on version every three days so the device rebuilds the image.
 RUN apk upgrade --no-cache
 COPY run.sh /run.sh
+COPY schedule.sh /schedule.sh
 RUN chmod +x /run.sh
 ARG BUILD_ARCH
 ARG BUILD_VERSION

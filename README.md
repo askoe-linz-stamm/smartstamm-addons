@@ -2,7 +2,7 @@
 
 Home Assistant add-on repository of ASKÖ Linz-Stamm.
 
-- **SmartStamm Netzmessung**: hourly Speedtest.net (official Ookla CLI against a fixed server, default LIWEST Linz) and hourly RTR-Netztest (RMBT client of the Austrian regulator), each reported as Home Assistant sensors. See `netzmessung/DOCS.md`.
+- **SmartStamm Netzmessung**: Speedtest.net (official Ookla CLI against a fixed server, default LIWEST Linz) and RTR-Netztest (RMBT client of the Austrian regulator), each reported as Home Assistant sensors. Configurable intervals in hours or days, hourly by default, with random timing deviations. See `netzmessung/DOCS.md`.
 
 Add this repository in Home Assistant under Settings → Add-ons → Add-on store → ⋮ → Repositories:
 `https://github.com/askoe-linz-stamm/smartstamm-addons`
@@ -23,6 +23,13 @@ docker run --rm -e SUPERVISOR_TOKEN=x -v <dir>:/data netzmessung
 ```
 
 with an `options.json` and an empty file `dry_run` in `<dir>`; sensor payloads are then printed instead of sent.
+
+The scheduling tests run in a disposable Alpine container with a simulated clock and local measurement clients:
+
+```
+docker run --rm -v "$PWD:/repo:ro" -w /repo alpine:3.22 sh -c \
+  'apk add --no-cache bash jq tzdata >/dev/null && bash tests/schedule_test.sh && bash tests/run_test.sh'
+```
 
 ## Automatic updates
 

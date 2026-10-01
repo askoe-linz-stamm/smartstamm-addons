@@ -1,6 +1,6 @@
 #!/command/with-contenv bashio
 # SmartStamm Netzmessung: runs Speedtest.net (official Ookla CLI, fixed server)
-# and RTR-Netztest (RMBT client) on an hourly schedule and publishes the results
+# and RTR-Netztest (RMBT client) on configurable schedules and publishes the results
 # as Home Assistant sensors through the Supervisor core API proxy.
 # bashio enables errexit; a failed measurement must not end the add-on.
 set +o errexit +o errtrace
@@ -15,6 +15,9 @@ RTR_MINUTE=$(opt .rtr_minute)
 RTR_CONTROL=$(opt .rtr_control_server); RTR_CONTROL=${RTR_CONTROL:-https://c01.netztest.at}
 RTR_MODEL=$(opt .rtr_model); RTR_MODEL=${RTR_MODEL:-Home Assistant Green}
 RUN_ON_START=$(jq -r 'if .run_on_start == null then true else .run_on_start end' "${OPTIONS}")
+JITTER_MINUTES=$(opt .jitter_minutes); JITTER_MINUTES=${JITTER_MINUTES:-3}
+# shellcheck source=schedule.sh
+source "$(dirname "${BASH_SOURCE[0]}")/schedule.sh"
 export HOME=/data            # keeps Ookla licence acceptance and the RMBT client UUID across restarts
 BIN=/data/bin
 API="http://supervisor/core/api"
@@ -160,24 +163,32 @@ run_rtr() {
     esac
   done ) <&0 &
 
-bashio::log.info "Netzmessung started; Speedtest.net at minute ${SPEEDTEST_MINUTE:-off} (server ${SPEEDTEST_SERVER}, fallback ${SPEEDTEST_FALLBACK:-none}), RTR-Netztest at minute ${RTR_MINUTE:-off}"
+bashio::log.info "Netzmessung started; Speedtest.net at minute ${SPEEDTEST_MINUTE:-off} (server ${SPEEDTEST_SERVER}, fallback ${SPEEDTEST_FALLBACK:-none}), RTR-Netztest at minute ${RTR_MINUTE:-off}; deviation ±${JITTER_MINUTES} minutes"
 until install_clients; do bashio::log.warning "Retrying client download in 60 s"; sleep 60; done
 if [ "${RUN_ON_START}" = "true" ]; then
   [ -n "${SPEEDTEST_MINUTE}" ] && run_speedtest
   [ -n "${RTR_MINUTE}" ] && run_rtr
 fi
-# Each schedule fires once per hour when the current minute reaches its target.
-# Slots already passed in the current hour count as done so a restart does not
-# repeat them (or run them at all when run_on_start is false).
-hour=$(date +%Y%m%d%H); minute=$(date +%M | sed 's/^0*//'); minute=${minute:-0}
-done_speedtest=""; done_rtr=""
-[ -n "${SPEEDTEST_MINUTE}" ] && [ "${minute}" -ge "${SPEEDTEST_MINUTE}" ] && done_speedtest="${hour}"
-[ -n "${RTR_MINUTE}" ] && [ "${minute}" -ge "${RTR_MINUTE}" ] && done_rtr="${hour}"
+# Missing new options retain hourly schedules on existing installations.
+now=$(date +%s)
+for measurement in speedtest rtr; do
+  interval=$(opt ".${measurement}_interval"); unit=$(opt ".${measurement}_interval_unit")
+  target_hour=$(opt ".${measurement}_hour"); target_minute=$(opt ".${measurement}_minute")
+  schedule_init "${measurement}" "${interval:-1}" "${unit:-hours}" "${target_hour:-0}" "${target_minute}" "${JITTER_MINUTES}" "${now}" \
+    || { bashio::log.error "Cannot initialize ${measurement} schedule"; exit 1; }
+  [ -n "${SCHEDULE[$measurement.due]}" ] && bashio::log.info "${measurement}: every ${interval:-1} ${unit:-hours}; next measurement $(date -d "@${SCHEDULE[$measurement.due]}" -Iseconds)"
+done
 while true; do
   if [ -f /tmp/trigger_speedtest ]; then rm -f /tmp/trigger_speedtest; bashio::log.info "Manual trigger: Speedtest.net"; run_speedtest; fi
   if [ -f /tmp/trigger_rtr ]; then rm -f /tmp/trigger_rtr; bashio::log.info "Manual trigger: RTR-Netztest"; run_rtr; fi
-  hour=$(date +%Y%m%d%H); minute=$(date +%M | sed 's/^0*//'); minute=${minute:-0}
-  if [ -n "${SPEEDTEST_MINUTE}" ] && [ "${minute}" -ge "${SPEEDTEST_MINUTE}" ] && [ "${done_speedtest}" != "${hour}" ]; then done_speedtest="${hour}"; run_speedtest; fi
-  if [ -n "${RTR_MINUTE}" ] && [ "${minute}" -ge "${RTR_MINUTE}" ] && [ "${done_rtr}" != "${hour}" ]; then done_rtr="${hour}"; run_rtr; fi
+  for measurement in speedtest rtr; do
+    now=$(date +%s)
+    if schedule_due "${measurement}" "${now}"; then
+      schedule_advance "${measurement}" "${now}" \
+        || { bashio::log.error "Cannot advance ${measurement} schedule"; exit 1; }
+      "run_${measurement}"
+      bashio::log.info "${measurement}: next measurement $(date -d "@${SCHEDULE[$measurement.due]}" -Iseconds)"
+    fi
+  done
   sleep 10
 done

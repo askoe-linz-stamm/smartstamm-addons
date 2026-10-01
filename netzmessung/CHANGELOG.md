@@ -1,3 +1,9 @@
+## 2026.10.1
+
+- Each measurement can run every N hours or N calendar days, with a configurable local hour for daily measurements.
+- Measurements run up to three minutes before or after their target by default. `jitter_minutes` adjusts this deviation or disables it with `0`.
+- Pending schedule targets survive restarts. Daily schedules preserve local wall-clock time across daylight saving changes.
+
 ## 2026.9.29
 
 - Status sensors carry `error_code` (`measurement-failed`, `client-exit`, `result-format`) and `failed_runs` on errors, so SmartStamm can report lasting failures as GitHub issues.
