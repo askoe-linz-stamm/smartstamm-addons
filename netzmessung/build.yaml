@@ -1,4 +1,4 @@
 # Built by the Supervisor on the device (no prebuilt image): the Dockerfile only
-# adds the run script; both measurement clients are downloaded at first start.
+# adds scripts and router API dependencies; measurement clients are downloaded at first start.
 build_from:
   aarch64: ghcr.io/home-assistant/aarch64-base:3.24

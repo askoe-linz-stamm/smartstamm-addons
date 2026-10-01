@@ -1,7 +1,7 @@
 name: SmartStamm Netzmessung
-version: "2026.10.1"
+version: "2026.10.1.1"
 slug: netzmessung
-description: Scheduled internet speed measurements (Speedtest.net via Ookla CLI, RTR-Netztest via RMBT client) reported as Home Assistant sensors
+description: Geplante Internetmessungen mit Speedtest.net und RTR-Netztest als Home-Assistant-Sensoren
 url: https://github.com/askoe-linz-stamm/smartstamm-addons/tree/main/netzmessung
 arch:
   - aarch64
@@ -11,32 +11,71 @@ boot: auto
 homeassistant_api: true
 stdin: true
 options:
-  speedtest_minute: 0
-  speedtest_interval: 1
-  speedtest_interval_unit: hours
-  speedtest_hour: 0
-  speedtest_server_id: 818
-  speedtest_fallback_server_id: 73500
-  rtr_minute: 30
-  rtr_interval: 1
-  rtr_interval_unit: hours
-  rtr_hour: 0
-  rtr_control_server: https://c01.netztest.at
-  rtr_model: Home Assistant Green
-  run_on_start: true
-  jitter_minutes: 3
+  speedtest:
+    enabled: true
+    interval: 1
+    interval_unit: Stunden
+    hour: 0
+    minute: 0
+    server: LIWEST, Linz, Österreich, ID 818
+    fallback_server: Energie AG, Linz, Österreich, ID 73500
+  rtr:
+    enabled: true
+    interval: 1
+    interval_unit: Stunden
+    hour: 0
+    minute: 30
+    server: Automatisch auswählen
+    control_server: https://c01.netztest.at
+    model: Home Assistant Green
+  protection:
+    enabled: false
+    threshold_mbps: 2
+    router_url: http://192.168.3.1
+  general:
+    run_on_start: true
+    jitter_minutes: 3
 schema:
+  speedtest:
+    enabled: bool
+    interval: int(1,365)
+    interval_unit: list(Stunden|Tage)
+    hour: int(0,23)
+    minute: int(0,59)
+    server: list(Automatisch auswählen|LIWEST, Linz, Österreich, ID 818|Energie AG, Linz, Österreich, ID 73500)
+    fallback_server: list(Kein Ersatzserver|LIWEST, Linz, Österreich, ID 818|Energie AG, Linz, Österreich, ID 73500)
+    custom_server_id: int?
+    custom_fallback_server_id: int?
+  rtr:
+    enabled: bool
+    interval: int(1,365)
+    interval_unit: list(Stunden|Tage)
+    hour: int(0,23)
+    minute: int(0,59)
+    server: 'list(Automatisch auswählen|RTR https 100G AT #1|RTR https 100G AT #2|RTR https 100G AT #3|RTR Cov vie01|RTR https DE|RTR https 100G LJ|AKOS https 100G #1|AKOS https 100G #2|CTU https #1|CTU https #2|RTR https SIN|RTR https US west)'
+    control_server: url
+    model: str
+  protection:
+    enabled: bool
+    threshold_mbps: float(0.1,1000)
+    router_url: url
+    password: str?
+  general:
+    run_on_start: bool
+    jitter_minutes: int(0,15)
+  # Retain existing Supervisor options until the one-time grouped migration.
+  # They have no defaults and are hidden on new installations.
   speedtest_minute: int(0,59)?
   speedtest_interval: int(1,365)?
   speedtest_interval_unit: list(hours|days)?
   speedtest_hour: int(0,23)?
-  speedtest_server_id: int
+  speedtest_server_id: int?
   speedtest_fallback_server_id: int?
   rtr_minute: int(0,59)?
   rtr_interval: int(1,365)?
   rtr_interval_unit: list(hours|days)?
   rtr_hour: int(0,23)?
-  rtr_control_server: url
-  rtr_model: str
-  run_on_start: bool
+  rtr_control_server: url?
+  rtr_model: str?
+  run_on_start: bool?
   jitter_minutes: int(0,15)?

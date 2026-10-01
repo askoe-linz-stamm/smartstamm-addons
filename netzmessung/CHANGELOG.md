@@ -1,3 +1,10 @@
+## 2026.10.1.1
+
+- Native Home Assistant configuration with German labels, explanations and separate sections for each measurement, connection protection and general options.
+- Named Ookla and RTR server selections, including automatic selection. Existing configurations and custom Ookla IDs can be migrated without changing their schedules.
+- Optional TCL HH515L connection protection checks combined download and upload over 60 seconds before automatic tests. Busy or unavailable connections skip the test; manual requests bypass protection.
+- Updated the pinned RTR client to 336e0a8 for explicit measurement server selection.
+
 ## 2026.10.1
 
 - Each measurement can run every N hours or N calendar days, with a configurable local hour for daily measurements.
