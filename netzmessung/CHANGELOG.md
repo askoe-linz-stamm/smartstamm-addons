@@ -1,3 +1,7 @@
+## 2026.10.1.3
+
+- Scheduled rebuild: Alpine packages of the base image refreshed (`apk upgrade`), no upstream changes.
+
 ## 2026.10.1.2
 
 - Connection protection observes traffic before the scheduled test instead of delaying it by the observation. All three consecutive one-minute averages must stay below the threshold.
