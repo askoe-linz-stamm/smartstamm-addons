@@ -1,5 +1,5 @@
 #!/command/with-contenv bashio
-# SmartStamm Netzmessung: runs Speedtest.net (official Ookla CLI, fixed server)
+# SmartStamm Netzmessung: runs Speedtest.net (official Ookla CLI)
 # and RTR-Netztest (RMBT client) on configurable schedules and publishes the results
 # as Home Assistant sensors through the Supervisor core API proxy.
 # bashio enables errexit; a failed measurement must not end the add-on.
@@ -7,15 +7,10 @@ set +o errexit +o errtrace
 set -o pipefail
 
 OPTIONS=/data/options.json   # add-on options as written by the Supervisor
-opt() { jq -r "$1 // empty" "${OPTIONS}"; }
-SPEEDTEST_MINUTE=$(opt .speedtest_minute)
-SPEEDTEST_SERVER=$(opt .speedtest_server_id)
-SPEEDTEST_FALLBACK=$(opt .speedtest_fallback_server_id)
-RTR_MINUTE=$(opt .rtr_minute)
-RTR_CONTROL=$(opt .rtr_control_server); RTR_CONTROL=${RTR_CONTROL:-https://c01.netztest.at}
-RTR_MODEL=$(opt .rtr_model); RTR_MODEL=${RTR_MODEL:-Home Assistant Green}
-RUN_ON_START=$(jq -r 'if .run_on_start == null then true else .run_on_start end' "${OPTIONS}")
-JITTER_MINUTES=$(opt .jitter_minutes); JITTER_MINUTES=${JITTER_MINUTES:-3}
+# shellcheck source=options.sh
+source "$(dirname "${BASH_SOURCE[0]}")/options.sh"
+options_upgrade "${OPTIONS}" || { bashio::log.error 'Die bisherigen Einstellungen konnten nicht umgestellt werden. Bitte das Add-on erneut starten.'; exit 1; }
+load_options "${OPTIONS}" || { bashio::log.error "Cannot read Netzmessung options"; exit 1; }
 # shellcheck source=schedule.sh
 source "$(dirname "${BASH_SOURCE[0]}")/schedule.sh"
 export HOME=/data            # keeps Ookla licence acceptance and the RMBT client UUID across restarts
@@ -24,8 +19,8 @@ API="http://supervisor/core/api"
 
 # Measurement clients, downloaded once into /data/bin (see install_clients).
 OOKLA_VERSION=1.2.0
-RMBT_RELEASE=rmbt-client-cb87ff8   # tag in askoe-linz-stamm/smartstamm-addons, built from open-rmbt-client-cli commit cb87ff88235a2b075d61c9a57e36a2fa332aaf11
-RMBT_SHA256=1dadffcec7c2b7546f5b54f46e30d04fcae33a5b64c397b0f63833bda76f2ba4
+RMBT_RELEASE=rmbt-client-336e0a8   # Built from open-rmbt-client-cli commit 336e0a81e14ce66a340dab46357e5f3a496333b4
+RMBT_SHA256=41c70ce870d62c6aea8c163001829e0e88e46bc3407d64429471650260d27530
 
 # Publish one sensor state. $1 entity id, $2 state, $3 attributes JSON object.
 publish() {
@@ -73,13 +68,15 @@ install_clients() {
 
 # ---------------------------------------------------------------- Speedtest.net
 speedtest_json() {   # $1 server id; prints the JSON result line on success
-  timeout 180 "${BIN}/speedtest" --accept-license --accept-gdpr -f json -p no -s "$1" 2>/dev/null | grep '"type":"result"' | tail -1
+  local server_options=()
+  [ -n "$1" ] && server_options=(-s "$1")
+  timeout 180 "${BIN}/speedtest" --accept-license --accept-gdpr -f json -p no "${server_options[@]}" 2>/dev/null | grep '"type":"result"' | tail -1
 }
 
 run_speedtest() {
-  bashio::log.info "Speedtest.net: starting against server ${SPEEDTEST_SERVER}"
+  bashio::log.info "Speedtest.net: starting against server ${SPEEDTEST_SERVER:-automatic}"
   set_status sensor.speedtest_status "Speedtest.net Status" running "Messung läuft"
-  local json used="${SPEEDTEST_SERVER}"
+  local json used="${SPEEDTEST_SERVER:-automatic}"
   json=$(speedtest_json "${SPEEDTEST_SERVER}")
   if [ -z "${json}" ] && [ -n "${SPEEDTEST_FALLBACK}" ]; then
     bashio::log.warning "Speedtest.net: server ${SPEEDTEST_SERVER} failed, trying fallback ${SPEEDTEST_FALLBACK}"
@@ -118,8 +115,9 @@ run_speedtest() {
 run_rtr() {
   bashio::log.info "RTR-Netztest: starting against ${RTR_CONTROL}"
   set_status sensor.rtr_netztest_status "RTR-Netztest Status" running "Messung läuft"
-  local out rc
-  out=$(timeout 300 "${BIN}/rmbt-client" --host "${RTR_CONTROL}" --type CLI --platform Linux --model "${RTR_MODEL}" --nettype 98 2>&1); rc=$?
+  local out rc server_options=()
+  [ -n "${RTR_SERVER_UUID}" ] && server_options=(--server_uuid "${RTR_SERVER_UUID}")
+  out=$(timeout 300 "${BIN}/rmbt-client" --host "${RTR_CONTROL}" --type CLI --platform Linux --model "${RTR_MODEL}" --nettype 98 "${server_options[@]}" 2>&1); rc=$?
   if [ $rc -ne 0 ]; then
     bashio::log.error "RTR-Netztest: client exited with ${rc}: $(echo "${out}" | tail -3 | tr '\n' ' ')"
     RTR_FAILS=$((RTR_FAILS + 1))
@@ -152,6 +150,41 @@ run_rtr() {
   bashio::log.info "RTR-Netztest: down ${down} Mbit/s, up ${up} Mbit/s, ping ${ping_med} ms, ${share}"
 }
 
+# Guard only automatic measurements. Manual requests explicitly bypass it.
+# Unknown, missing or incomplete router data must never permit a protected test.
+run_automatic() {
+  local measurement="$1" entity name result rc state average reason message
+  if [ "${PROTECTION_ENABLED}" = true ]; then
+    if [ "${measurement}" = speedtest ]; then
+      entity=sensor.speedtest_status; name='Speedtest.net Status'
+    else
+      entity=sensor.rtr_netztest_status; name='RTR-Netztest Status'
+    fi
+    set_status "${entity}" "${name}" checking 'Internetnutzung wird 60 Sekunden lang geprüft'
+    result=$(python3 "$(dirname "${BASH_SOURCE[0]}")/router.py" "${OPTIONS}" 2>/dev/null); rc=$?
+    state=$(jq -r '.state // empty' <<< "${result}" 2>/dev/null)
+    average=$(jq -er '.average_mbps | select(type == "number" and . >= 0)' <<< "${result}" 2>/dev/null)
+    if [ "${rc}" -ne 0 ] || [ "${state}" != idle ] || [ -z "${average}" ]; then
+      if [ "${rc}" = 2 ] && [ "${state}" = busy ] && [ -n "${average}" ]; then
+        message="Messung übersprungen. Internetnutzung ${average} Mbit/s, Schwelle ${PROTECTION_THRESHOLD_MBPS} Mbit/s."
+      else
+        reason=$(jq -r '.reason // empty' <<< "${result}" 2>/dev/null)
+        case "${reason}" in
+          router-password-missing) message='Messung übersprungen. Das Routerpasswort fehlt.' ;;
+          router-unauthorized) message='Messung übersprungen. Anmeldung am Router fehlgeschlagen.' ;;
+          router-unreachable) message='Messung übersprungen. Der Router ist nicht erreichbar.' ;;
+          router-traffic-invalid|router-traffic-stale) message='Messung übersprungen. Keine aktuellen Internetnutzungsdaten vom Router.' ;;
+          *) message='Messung übersprungen. Die Internetnutzung konnte nicht zuverlässig geprüft werden.' ;;
+        esac
+      fi
+      set_status "${entity}" "${name}" skipped "${message}"
+      bashio::log.info "${measurement}: ${message}"
+      return 0
+    fi
+  fi
+  "run_${measurement}"
+}
+
 # ---------------------------------------------------------------- scheduling
 # Manual trigger via `hassio.addon_stdin`: input "speedtest" or "rtr" starts that
 # measurement, anything else starts both.
@@ -163,20 +196,23 @@ run_rtr() {
     esac
   done ) <&0 &
 
-bashio::log.info "Netzmessung started; Speedtest.net at minute ${SPEEDTEST_MINUTE:-off} (server ${SPEEDTEST_SERVER}, fallback ${SPEEDTEST_FALLBACK:-none}), RTR-Netztest at minute ${RTR_MINUTE:-off}; deviation ±${JITTER_MINUTES} minutes"
+bashio::log.info "Netzmessung started; Speedtest.net at minute ${SPEEDTEST_MINUTE:-off} (server ${SPEEDTEST_SERVER:-automatic}, fallback ${SPEEDTEST_FALLBACK:-none}), RTR-Netztest at minute ${RTR_MINUTE:-off}; deviation ±${JITTER_MINUTES} minutes"
 until install_clients; do bashio::log.warning "Retrying client download in 60 s"; sleep 60; done
 if [ "${RUN_ON_START}" = "true" ]; then
-  [ -n "${SPEEDTEST_MINUTE}" ] && run_speedtest
-  [ -n "${RTR_MINUTE}" ] && run_rtr
+  [ -n "${SPEEDTEST_MINUTE}" ] && run_automatic speedtest
+  [ -n "${RTR_MINUTE}" ] && run_automatic rtr
 fi
 # Missing new options retain hourly schedules on existing installations.
 now=$(date +%s)
 for measurement in speedtest rtr; do
-  interval=$(opt ".${measurement}_interval"); unit=$(opt ".${measurement}_interval_unit")
-  target_hour=$(opt ".${measurement}_hour"); target_minute=$(opt ".${measurement}_minute")
-  schedule_init "${measurement}" "${interval:-1}" "${unit:-hours}" "${target_hour:-0}" "${target_minute}" "${JITTER_MINUTES}" "${now}" \
+  prefix="${measurement^^}"
+  interval_key="${prefix}_INTERVAL"; unit_key="${prefix}_INTERVAL_UNIT"
+  hour_key="${prefix}_HOUR"; minute_key="${prefix}_MINUTE"
+  interval="${!interval_key}"; unit="${!unit_key}"
+  target_hour="${!hour_key}"; target_minute="${!minute_key}"
+  schedule_init "${measurement}" "${interval}" "${unit}" "${target_hour}" "${target_minute}" "${JITTER_MINUTES}" "${now}" \
     || { bashio::log.error "Cannot initialize ${measurement} schedule"; exit 1; }
-  [ -n "${SCHEDULE[$measurement.due]}" ] && bashio::log.info "${measurement}: every ${interval:-1} ${unit:-hours}; next measurement $(date -d "@${SCHEDULE[$measurement.due]}" -Iseconds)"
+  [ -n "${SCHEDULE[$measurement.due]}" ] && bashio::log.info "${measurement}: every ${interval} ${unit}; next measurement $(date -d "@${SCHEDULE[$measurement.due]}" -Iseconds)"
 done
 while true; do
   if [ -f /tmp/trigger_speedtest ]; then rm -f /tmp/trigger_speedtest; bashio::log.info "Manual trigger: Speedtest.net"; run_speedtest; fi
@@ -186,7 +222,7 @@ while true; do
     if schedule_due "${measurement}" "${now}"; then
       schedule_advance "${measurement}" "${now}" \
         || { bashio::log.error "Cannot advance ${measurement} schedule"; exit 1; }
-      "run_${measurement}"
+      run_automatic "${measurement}"
       bashio::log.info "${measurement}: next measurement $(date -d "@${SCHEDULE[$measurement.due]}" -Iseconds)"
     fi
   done

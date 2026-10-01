@@ -1,0 +1,172 @@
+configuration:
+  speedtest:
+    name: Speedtest.net
+    description: >-
+      Internetgeschwindigkeit mit dem Ookla-Test messen. Zeitplan und Server
+      gelten nur für Speedtest.net.
+    fields:
+      enabled:
+        name: Automatische Messungen aktivieren
+        description: Manuell gestartete Messungen bleiben auch bei ausgeschaltetem Zeitplan möglich.
+      interval:
+        name: Abstand zwischen Messungen
+        description: >-
+          Zusammen mit der Einheit festlegen. 6 Stunden bedeutet alle sechs
+          Stunden, 1 Tag bedeutet täglich.
+      interval_unit:
+        name: Einheit des Zeitplans
+        description: Stunden für einen festen Stundenabstand, Tage für dieselbe lokale Uhrzeit an den Messtagen.
+      hour:
+        name: Stunde bei täglichen Messungen
+        description: 0 bis 23. Bei Stundenintervallen wird dieses Feld nicht verwendet.
+      minute:
+        name: Minute der Messung
+        description: >-
+          0 bis 59. Bei Stundenintervallen die Minute innerhalb der Stunde,
+          bei täglichen Messungen zusammen mit der Stunde die gewünschte Uhrzeit.
+      server:
+        name: Bevorzugter Messserver
+        description: >-
+          Anbieter, Standort und Servernummer stehen direkt in der Auswahl.
+          Die automatische Auswahl berücksichtigt den Standort der öffentlichen
+          IP-Adresse. Bei Mobilfunk kann dieser vom tatsächlichen Standort abweichen.
+      fallback_server:
+        name: Ersatzserver bei einem Fehler
+        description: Wird nur verwendet, wenn der bevorzugte Server keine erfolgreiche Messung liefert.
+      custom_server_id:
+        name: Eigene Servernummer aus einer früheren Konfiguration
+        description: >-
+          Eine übernommene Servernummer hat Vorrang vor der Serverauswahl.
+          Dieses optionale Feld leeren, um einen Server aus der Auswahl zu verwenden.
+      custom_fallback_server_id:
+        name: Eigene Ersatzservernummer aus einer früheren Konfiguration
+        description: >-
+          Eine übernommene Servernummer hat Vorrang vor der Ersatzserverauswahl.
+          Dieses optionale Feld leeren, um die Auswahl zu verwenden.
+  rtr:
+    name: RTR-Netztest
+    description: >-
+      Internetgeschwindigkeit mit dem österreichischen RTR-Netztest messen.
+      Dieser Zeitplan ist unabhängig von Speedtest.net.
+    fields:
+      enabled:
+        name: Automatische Messungen aktivieren
+        description: Manuell gestartete Messungen bleiben auch bei ausgeschaltetem Zeitplan möglich.
+      interval:
+        name: Abstand zwischen Messungen
+        description: Zusammen mit der Einheit festlegen. 1 Tag bedeutet täglich, 2 Tage jeden zweiten Tag.
+      interval_unit:
+        name: Einheit des Zeitplans
+        description: Stunden für einen festen Stundenabstand, Tage für dieselbe lokale Uhrzeit an den Messtagen.
+      hour:
+        name: Stunde bei täglichen Messungen
+        description: 0 bis 23. Bei Stundenintervallen wird dieses Feld nicht verwendet.
+      minute:
+        name: Minute der Messung
+        description: >-
+          0 bis 59. Bei Stundenintervallen die Minute innerhalb der Stunde,
+          bei täglichen Messungen zusammen mit der Stunde die gewünschte Uhrzeit.
+      server:
+        name: Bevorzugter Messserver
+        description: >-
+          Die automatische Auswahl überlässt den Messserver dem RTR-Netztest.
+          Die Liste enthält die offiziellen Servernamen. RTR liefert dazu
+          keine gesonderten Angaben zu Standort oder Betreiber.
+      control_server:
+        name: RTR-Steuerungsserver
+        description: >-
+          Organisiert den Test und nimmt die Ergebnisse entgegen. Dies ist
+          kein Messserver. Für den öffentlichen RTR-Netztest die Vorgabe beibehalten.
+      model:
+        name: Gerätebezeichnung im Messergebnis
+        description: Wird an RTR übermittelt. Zum Beispiel Home Assistant Green.
+  protection:
+    name: Streaming und andere Internetnutzung schützen
+    description: >-
+      Vor jeder automatischen Messung 60 Sekunden lang die gesamte
+      Internetnutzung am TCL HH515L prüfen. Download und Upload werden
+      addiert und über diese Minute gemittelt.
+    fields:
+      enabled:
+        name: Bei beanspruchter Verbindung überspringen
+        description: >-
+          Bei erreichter Schwelle entfällt die Messung bis zum nächsten regulären
+          Termin. Auch bei fehlenden oder veralteten Routerdaten wird sie
+          übersprungen. Manuelle Messungen starten weiterhin auf Wunsch.
+      threshold_mbps:
+        name: Schwelle der Internetnutzung in Mbit/s
+        description: >-
+          Gemeinsamer Mittelwert von Download und Upload über 60 Sekunden.
+          Eine niedrigere Schwelle schützt schon bei geringer Nutzung.
+          2 Mbit/s ist die Vorgabe und kann an das eigene Streaming angepasst werden.
+      router_url:
+        name: Adresse der Routerverwaltung
+        description: Die lokale Adresse des TCL HH515L, üblicherweise http://192.168.3.1.
+      password:
+        name: Passwort der Routerverwaltung
+        description: >-
+          Das Passwort für die Anmeldung an der Routeroberfläche, kein
+          WLAN-Passwort. Es wird zum Lesen der Internetnutzung verwendet.
+          Das Passwortfeld bei Bedarf über
+          "Nicht verwendete optionale Konfigurationsoptionen anzeigen" einblenden.
+  general:
+    name: Allgemeine Einstellungen
+    description: Diese Einstellungen gelten für beide Messverfahren.
+    fields:
+      run_on_start:
+        name: Nach dem Start des Add-ons messen
+        description: >-
+          Für jedes aktivierte Messverfahren einmal messen. Bei aktiviertem
+          Schutz wird vor jeder Messung zuerst 60 Sekunden lang die
+          Internetnutzung geprüft.
+      jitter_minutes:
+        name: Zufällige Zeitabweichung in Minuten
+        description: >-
+          Für jeden Termin neu ausgelost. Bei 3 Minuten beginnt der Termin
+          bis zu drei Minuten früher oder später. Bei aktiviertem Schutz beginnt
+          zuerst die 60-Sekunden-Prüfung. 0 bedeutet ohne Abweichung.
+  speedtest_minute:
+    name: Bisherige Speedtest-Minute, vor der Umstellung
+    description: &legacy_help >-
+      Übernommene Einstellung aus der bisherigen Konfiguration. Sie hat
+      Vorrang bis zur automatischen Umstellung beim ersten Add-on-Start.
+      Danach die Konfigurationsseite neu laden. Nicht zusätzlich bearbeiten.
+  speedtest_interval:
+    name: Bisheriger Speedtest-Abstand, vor der Umstellung
+    description: *legacy_help
+  speedtest_interval_unit:
+    name: Bisherige Speedtest-Einheit, vor der Umstellung
+    description: *legacy_help
+  speedtest_hour:
+    name: Bisherige Speedtest-Stunde, vor der Umstellung
+    description: *legacy_help
+  speedtest_server_id:
+    name: Bisheriger Speedtest-Server, vor der Umstellung
+    description: *legacy_help
+  speedtest_fallback_server_id:
+    name: Bisheriger Speedtest-Ersatzserver, vor der Umstellung
+    description: *legacy_help
+  rtr_minute:
+    name: Bisherige RTR-Minute, vor der Umstellung
+    description: *legacy_help
+  rtr_interval:
+    name: Bisheriger RTR-Abstand, vor der Umstellung
+    description: *legacy_help
+  rtr_interval_unit:
+    name: Bisherige RTR-Einheit, vor der Umstellung
+    description: *legacy_help
+  rtr_hour:
+    name: Bisherige RTR-Stunde, vor der Umstellung
+    description: *legacy_help
+  rtr_control_server:
+    name: Bisheriger RTR-Steuerungsserver, vor der Umstellung
+    description: *legacy_help
+  rtr_model:
+    name: Bisherige RTR-Gerätebezeichnung, vor der Umstellung
+    description: *legacy_help
+  run_on_start:
+    name: Bisherige Startmessung, vor der Umstellung
+    description: *legacy_help
+  jitter_minutes:
+    name: Bisherige Zeitabweichung, vor der Umstellung
+    description: *legacy_help

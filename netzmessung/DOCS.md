@@ -14,48 +14,55 @@ Both measurements run sequentially in one loop, so they never overlap.
 | `sensor.speedtest_download` | Mbit/s | Download (attributes `bytes_received`, `latency_loaded_ms`) |
 | `sensor.speedtest_upload` | Mbit/s | Upload (attributes `bytes_sent`, `latency_loaded_ms`) |
 | `sensor.speedtest_ping` | ms | Idle latency (attributes `jitter_ms`, `packet_loss`) |
-| `sensor.speedtest_status` | text | `ok`, `running` or `error`, with message |
+| `sensor.speedtest_status` | text | `ok`, `checking`, `running`, `skipped` or `error`, with message |
 | `sensor.rtr_netztest_download` | Mbit/s | Download |
 | `sensor.rtr_netztest_upload` | Mbit/s | Upload |
 | `sensor.rtr_netztest_ping` | ms | Median ping (attribute `ping_min`) |
-| `sensor.rtr_netztest_status` | text | `ok`, `running` or `error`, with message |
+| `sensor.rtr_netztest_status` | text | `ok`, `checking`, `running`, `skipped` or `error`, with message |
 
 Speedtest sensors carry `server_name`, `server_location`, `server_country`, `server_id`, `server_host`, `isp`, `share_url` and `measured_at`; RTR sensors carry `server`, `share_url`, `measured_at` and `threads`. The entity ids match the former Speedtest.net integration and the former separate add-ons, so history and dashboards keep working.
 
-## Options
+## Konfiguration
 
-| Option | Default | Meaning |
-| --- | --- | --- |
-| `speedtest_minute` | `0` | Target minute for Speedtest.net; leave empty to disable scheduled and startup measurements |
-| `speedtest_interval` | `1` | Number of hours or days between Speedtest.net measurements, from 1 to 365 |
-| `speedtest_interval_unit` | `hours` | `hours` for elapsed hours, `days` for calendar days |
-| `speedtest_hour` | `0` | Target local hour for daily Speedtest.net measurements, from 0 to 23; ignored with `hours` |
-| `speedtest_server_id` | `818` | Speedtest.net server id (818 = LIWEST Linz). Find ids at `https://www.speedtest.net/api/js/servers?engine=js&search=<city>` |
-| `speedtest_fallback_server_id` | `73500` | Server tried when the first one fails (73500 = Energie AG Linz); empty disables the fallback |
-| `rtr_minute` | `30` | Target minute for RTR-Netztest; leave empty to disable scheduled and startup measurements |
-| `rtr_interval` | `1` | Number of hours or days between RTR-Netztest measurements, from 1 to 365 |
-| `rtr_interval_unit` | `hours` | `hours` for elapsed hours, `days` for calendar days |
-| `rtr_hour` | `0` | Target local hour for daily RTR-Netztest measurements, from 0 to 23; ignored with `hours` |
-| `rtr_control_server` | `https://c01.netztest.at` | RTR control server |
-| `rtr_model` | `Home Assistant Green` | Device model reported to RTR |
-| `run_on_start` | `true` | Run both enabled measurements when the add-on starts |
-| `jitter_minutes` | `3` | Maximum random deviation before or after each target, from 0 to 15 minutes; `0` disables it |
+Auf der Registerkarte **Konfiguration** gibt es vier Abschnitte mit deutschen Feldnamen und Beschreibungen. Nach Änderungen speichern und das Add-on neu starten.
 
-Change these options on the add-on's **Configuration** tab, save, and restart the add-on.
+### Speedtest.net und RTR-Netztest
 
-For Speedtest.net every six hours around minute 15, set `speedtest_interval: 6`, `speedtest_interval_unit: hours`, and `speedtest_minute: 15`. The first target is in the current hour if its randomized time is still ahead; otherwise it is six hours later. Following targets stay six hours apart, independently of measurement duration or random deviation.
+Jedes Messverfahren hat einen eigenen Schalter und Zeitplan. Für eine Messung alle sechs Stunden um Minute 15 den Abstand auf `6`, die Einheit auf `Stunden` und die Minute auf `15` setzen. Das Stundenfeld gilt nur bei täglichen Messungen.
 
-For RTR-Netztest every day around 18:30, set `rtr_interval: 1`, `rtr_interval_unit: days`, `rtr_hour: 18`, and `rtr_minute: 30`. Use `rtr_interval: 2` for every other day. A new daily schedule starts with today's target if its randomized time is still ahead, otherwise with the target N days later.
+Für eine tägliche RTR-Messung um 18:30 den Abstand auf `1`, die Einheit auf `Tage`, die Stunde auf `18` und die Minute auf `30` setzen. Mit Abstand `2` läuft die Messung jeden zweiten Tag. Tagesintervalle halten die lokale Uhrzeit auch bei der Zeitumstellung ein. Eine im Frühjahr fehlende Uhrzeit verschiebt sich um den Zeitsprung. Eine im Herbst doppelte Uhrzeit wird einmal verwendet.
 
-With `jitter_minutes: 3`, the 18:30 target can run between 18:27 and 18:33. Each target gets its own random offset, which can cross an hour or midnight. The pending target and offset are saved in the add-on data directory and survive restarts. Changing schedule options or the timezone creates a new schedule. Missed targets are skipped rather than replayed. Startup and manual measurements run immediately and do not move the schedule. When both measurements are due, they run sequentially; a busy measurement can delay the other beyond its random window.
+Bei Speedtest.net stehen automatische Auswahl, LIWEST Linz und Energie AG Linz zur Verfügung. Die Servernamen enthalten Standort und Servernummer. Ein Ersatzserver kann bei einem Fehler übernehmen. Bereits gespeicherte andere Servernummern bleiben in optionalen Feldern erhalten und haben Vorrang vor der Auswahl. Diese Felder leeren, um wieder die benannten Server zu verwenden.
 
-Daily schedules use the add-on's local timezone and retain the selected wall-clock time across daylight saving changes. A time missing during the spring clock change moves forward by the clock jump, for example 02:30 to 03:30. A repeated autumn time runs once. Hourly schedules count elapsed hours, so they can run in both occurrences of a repeated hour.
+RTR bietet automatische Auswahl und zwölf benannte Server aus dem offiziellen Katalog. Die Zuordnung zu deren UUID erfolgt intern. Die Servernamen stammen von RTR, das keine gesonderten Angaben zu Standort oder Betreiber liefert. Der Steuerungsserver organisiert den Test und ist kein Messserver. Bei einem eigenen Steuerungsserver die automatische Messserverauswahl verwenden.
 
-The distinction between elapsed and calendar intervals follows the scheduling model described by [APScheduler](https://apscheduler.readthedocs.io/en/stable/modules/triggers/calendarinterval.html). Randomizing each target without moving the underlying cadence is also used by [systemd timers](https://github.com/systemd/systemd/blob/main/man/systemd.timer.xml). This add-on uses symmetric offsets so measurements can run both before and after their target.
+Home Assistants native Konfiguration stellt kurze Auswahllisten als Optionsfelder und längere als Dropdown dar. Sie bietet hier keine Suche und keinen Schieberegler. Die Nutzungsschwelle ist deshalb ein Zahlenfeld. Die Serverliste ist mit dieser Add-on-Version festgelegt und wird nicht während der Eingabe vom Anbieter geladen.
+
+### Streaming und andere Internetnutzung schützen
+
+Der Schutz ist zunächst ausgeschaltet. Zum Aktivieren die Adresse des TCL HH515L und sein Verwaltungspasswort hinterlegen, anschließend **Bei beanspruchter Verbindung überspringen** einschalten. Das optionale Passwortfeld über **Nicht verwendete optionale Konfigurationsoptionen anzeigen** einblenden. Das Passwort ist kein WLAN-Passwort. Home Assistant speichert es in den Add-on-Optionen und damit gegebenenfalls auch in Backups. Die Konfigurationsoberfläche maskiert es; das Add-on schreibt es nicht in seine Logs.
+
+Vor jeder automatischen Messung, auch nach dem Add-on-Start, liest das Add-on 60 Sekunden lang etwa alle fünf Sekunden die aktuellen Download- und Uploadraten über die API der Routeroberfläche. Beide Raten werden addiert. Aus den Stichproben entsteht ein zeitgewichteter Mittelwert in Mbit/s. Die installierte HH515L-Firmware liefert `Speed_Dl` und `Speed_Ul` in Bit/s, für Mbit/s teilt das Add-on durch 1.000.000.
+
+Erreicht dieser Mittelwert die eingestellte Schwelle, entfällt die Messung. Vorgabe sind `2 Mbit/s`. Eine kleinere Zahl schützt schon bei geringerer Nutzung. Auch ohne erreichbaren Router, bei fehlendem Passwort oder ungültigen beziehungsweise veralteten Daten wird übersprungen. Ein ausgelassener Test wird beim nächsten regulären Termin erneut versucht, nicht sofort nachgeholt. Die letzten Messergebnisse bleiben erhalten. Das Add-on zeigt während der Beobachtung `checking`, anschließend gegebenenfalls `skipped` mit dem Grund. Überspringen zählt nicht als Messfehler.
+
+Das Add-on beobachtet die gesamte Internetverbindung des Routers, einschließlich anderer Geräte. Es erkennt keine einzelnen Anwendungen. Ein Stream, der erst nach der Beobachtung startet, kann daher weiterhin mit einer Messung zusammentreffen. Der Routerzugriff wurde an HH515L TI v4.0 geprüft; andere Modelle oder Firmwarestände können abweichen. Die Anmeldung verwendet denselben Administratorzugang wie die Weboberfläche und kann eine dort bestehende Sitzung beeinflussen.
+
+### Allgemeine Einstellungen
+
+**Nach dem Start des Add-ons messen** startet jedes aktivierte Messverfahren einmal. Der Verbindungsschutz gilt dabei ebenfalls.
+
+**Zufällige Zeitabweichung in Minuten** gilt für beide Zeitpläne. Bei `3` liegt der Beginn eines Termins bis zu drei Minuten vor oder nach der gewählten Uhrzeit. Ist der Schutz aktiv, beginnt zu diesem Zeitpunkt die 60-Sekunden-Beobachtung, die eigentliche Messung folgt danach. `0` deaktiviert die Abweichung. Jeder Termin bekommt einen neuen Zufallswert. Ausstehende Termine überleben Neustarts; Änderungen an Zeitplan oder Zeitzone erzeugen einen neuen Zeitplan. Verpasste Termine werden ausgelassen.
+
+Die Messverfahren laufen nacheinander. Ist das erste noch beschäftigt, kann das zweite später als seine geplante Uhrzeit beginnen. Manuelle Messungen verändern den Zeitplan nicht.
+
+### Bestehende Installationen umstellen
+
+Der Supervisor verbindet neue Vorgaben mit bisher gespeicherten Optionen. Beim ersten Start stellt das Add-on diese automatisch auf die neuen Abschnitte um. Zeitpläne, deaktivierte Verfahren, unbekannte Servernummern und die Einstellung für Startmessungen bleiben erhalten. Danach die bereits geöffnete Konfigurationsseite neu laden. Schlägt das Speichern der Umstellung fehl, startet das Add-on keine Messungen und bittet im Log um einen erneuten Start. Es braucht dafür nur Zugriff auf seine eigenen Optionen, keine zusätzliche Supervisor-Rolle.
 
 ## Manual measurement
 
-Call the action `hassio.addon_stdin` with `addon: <this add-on's slug>` and `input: speedtest` or `input: rtr`; any other input starts both. The status sensors switch to `running` while a test is in progress.
+Call the action `hassio.addon_stdin` with `addon: <this add-on's slug>` and `input: speedtest` or `input: rtr`; any other input starts both. Manual requests bypass the connection protection and start the requested measurement even when automatic measurements are disabled. The status sensors switch to `running` while a test is in progress.
 
 ## Notes
 
