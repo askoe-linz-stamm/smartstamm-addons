@@ -18,6 +18,7 @@ EOF
 cat > /data/bin/speedtest <<'EOF'
 #!/usr/bin/env bash
 echo speedtest >> /data/runs
+cat /data/test-clock >> /data/speedtest-times
 printf '%s\n' "$*" >> /data/speedtest-arguments
 echo "$(($(cat /data/test-clock) + 20))" > /data/test-clock
 # First run fails. Subsequent manual requests must still work.
@@ -27,6 +28,7 @@ EOF
 cat > /data/bin/rmbt-client <<'EOF'
 #!/usr/bin/env bash
 echo rtr >> /data/runs
+cat /data/test-clock >> /data/rtr-times
 printf '%s\n' "$*" >> /data/rtr-arguments
 echo "$(($(cat /data/test-clock) + 20))" > /data/test-clock
 echo 'Download: 100'
@@ -38,11 +40,26 @@ EOF
 cat > /data/test-bin/python3 <<'EOF'
 #!/usr/bin/env bash
 [ "${1##*/}" = router.py ] || exit 3
-echo check >> /data/protection-checks
-echo "$(($(cat /data/test-clock) + 60))" > /data/test-clock
+case "${2:-}" in
+  monitor)
+    cat /data/test-clock > /data/monitor-start
+    # The parent waits only for the process, never for its traffic observation.
+    while true; do /bin/sleep 1; done
+    ;;
+  check)
+    echo scheduled >> /data/protection-checks
+    if [ ! -f /data/monitor-start ] || [ "$(($(cat /data/test-clock) - $(cat /data/monitor-start)))" -lt 180 ]; then
+      echo '{"state":"unavailable","reason":"router-observation-incomplete"}'; exit 3
+    fi
+    ;;
+  *)
+    echo startup >> /data/protection-checks
+    echo "$(($(cat /data/test-clock) + 180))" > /data/test-clock
+    ;;
+esac
 case "${TEST_PROTECTION}" in
-  idle) echo '{"state":"idle","average_mbps":0.5}'; exit 0 ;;
-  busy) echo '{"state":"busy","average_mbps":8}'; exit 2 ;;
+  idle) echo '{"state":"idle","average_mbps":0.5,"window_averages_mbps":[0.5,0.5,0.5]}'; exit 0 ;;
+  busy) echo '{"state":"busy","average_mbps":3,"window_averages_mbps":[0.5,8,0.5]}'; exit 2 ;;
   unavailable) echo '{"state":"unavailable","reason":"router-unauthorized"}'; exit 3 ;;
   malformed) echo 'not-json'; exit 0 ;;
 esac
@@ -59,6 +76,7 @@ sleep() {
   if [ "${now}" -ge "${TEST_MANUAL}" ] && [ ! -f /data/manual-once ]; then
     touch /data/manual-once /tmp/trigger_speedtest
   fi
+  /bin/sleep 0.01
   echo "$((now + $1))" > /data/test-clock
 }
 export -f bashio::log.info bashio::log.warning bashio::log.error sleep
@@ -73,7 +91,7 @@ export -f curl
 
 for mode in legacy daily; do
   rm -rf /data/schedules
-  rm -f /data/runs /data/failed-once /data/manual-once /data/speedtest-arguments /data/rtr-arguments /data/protection-checks /tmp/trigger_speedtest /tmp/trigger_rtr
+  rm -f /data/runs /data/failed-once /data/manual-once /data/speedtest-arguments /data/rtr-arguments /data/protection-checks /data/monitor-start /data/speedtest-times /data/rtr-times /tmp/trigger_speedtest /tmp/trigger_rtr
   date -d '2026-10-01 09:26:00' +%s > /data/test-clock
   TEST_MANUAL=$(date -d '2026-10-01 09:34:00' +%s)
   TEST_END=$(date -d '2026-10-01 09:35:00' +%s)
@@ -105,30 +123,33 @@ done
 
 for TEST_PROTECTION in idle busy unavailable malformed; do
   rm -rf /data/schedules
-  rm -f /data/runs /data/failed-once /data/manual-once /data/speedtest-arguments /data/rtr-arguments /data/protection-checks /tmp/trigger_speedtest /tmp/trigger_rtr
+  rm -f /data/runs /data/failed-once /data/manual-once /data/speedtest-arguments /data/rtr-arguments /data/protection-checks /data/monitor-start /data/speedtest-times /data/rtr-times /tmp/trigger_speedtest /tmp/trigger_rtr
   date -d '2026-10-01 09:26:00' +%s > /data/test-clock
-  TEST_MANUAL=$(date -d '2026-10-01 09:34:00' +%s)
+  TEST_MANUAL=$(date -d '2026-10-01 09:28:00' +%s)
   TEST_END=$(date -d '2026-10-01 09:35:00' +%s)
   cat > /data/options.json <<'EOF'
 {
   "speedtest":{"enabled":true,"minute":30,"server":"Automatisch auswählen","fallback_server":"Kein Ersatzserver"},
   "rtr":{"enabled":true,"minute":30,"server":"RTR https 100G AT #1"},
   "protection":{"enabled":true,"threshold_mbps":2,"password":"test-fixture-password"},
-  "general":{"run_on_start":true,"jitter_minutes":0}
+  "general":{"run_on_start":false,"jitter_minutes":0}
 }
 EOF
   bash "${RUN_SCRIPT:-netzmessung/run.sh}" < /dev/null > "/data/${TEST_PROTECTION}.log" 2>&1
-  [ "$(grep -c '^check$' /data/protection-checks)" = 4 ]
+  [ "$(grep -c '^scheduled$' /data/protection-checks)" = 2 ]
   if [ "${TEST_PROTECTION}" = idle ]; then
-    [ "$(grep -c '^speedtest$' /data/runs)" = 3 ]
-    [ "$(grep -c '^rtr$' /data/runs)" = 2 ]
+    [ "$(grep -c '^speedtest$' /data/runs)" = 2 ]
+    [ "$(grep -c '^rtr$' /data/runs)" = 1 ]
     if grep -q '"state":"skipped"' "/data/${TEST_PROTECTION}.log"; then exit 1; fi
+    # Preparation does not delay the scheduled test or a manual request.
+    [ "$(head -1 /data/speedtest-times)" = "$((TEST_MANUAL + 10))" ]
+    [ "$(tail -1 /data/speedtest-times)" = "$(date -d '2026-10-01 09:30:00' +%s)" ]
     grep -q -- '--server_uuid 59557829-5a22-42ff-9dce-b0c450aa79fb' /data/rtr-arguments
   else
-    # Both startup and scheduled tests skip. The manual request still executes.
+    # Both scheduled tests skip. The manual request still executes.
     [ "$(grep -c '^speedtest$' /data/runs)" = 1 ]
     if grep -q '^rtr$' /data/runs; then exit 1; fi
-    [ "$(grep -c '"state":"skipped"' "/data/${TEST_PROTECTION}.log")" = 4 ]
+    [ "$(grep -c '"state":"skipped"' "/data/${TEST_PROTECTION}.log")" = 2 ]
     if grep '"state":"skipped"' "/data/${TEST_PROTECTION}.log" | grep -q error_code; then exit 1; fi
     if [ "${TEST_PROTECTION}" = busy ]; then
       grep -q 'Internetnutzung 8 Mbit/s' "/data/${TEST_PROTECTION}.log"
@@ -142,4 +163,27 @@ EOF
   [ "$(jq -r .nominal /data/schedules/speedtest.json)" = "${expected}" ]
   [ "$(jq -r .nominal /data/schedules/rtr.json)" = "${expected}" ]
 done
+# A restart inside the observation window must skip, not postpone the slot.
+rm -rf /data/schedules
+rm -f /data/runs /data/protection-checks /data/monitor-start /data/manual-once /tmp/trigger_speedtest /tmp/trigger_rtr
+date -d '2026-10-01 09:29:00' +%s > /data/test-clock
+TEST_PROTECTION=idle
+TEST_MANUAL=$(date -d '2026-10-01 10:00:00' +%s)
+TEST_END=$(date -d '2026-10-01 09:31:00' +%s)
+bash "${RUN_SCRIPT:-netzmessung/run.sh}" < /dev/null > /data/restart.log 2>&1
+[ ! -f /data/runs ]
+[ "$(grep -c '"state":"skipped"' /data/restart.log)" = 2 ]
+[ "$(jq -r .nominal /data/schedules/rtr.json)" = "$(date -d '2026-10-01 10:30:00' +%s)" ]
+
+# Each startup test must observe a full three minutes before attempting a test.
+rm -rf /data/schedules
+rm -f /data/runs /data/protection-checks /data/monitor-start /data/speedtest-times /data/rtr-times
+jq '.general.run_on_start = true' /data/options.json > /data/options.tmp
+mv /data/options.tmp /data/options.json
+date -d '2026-10-01 09:00:00' +%s > /data/test-clock
+TEST_END=$(date -d '2026-10-01 09:07:00' +%s)
+bash "${RUN_SCRIPT:-netzmessung/run.sh}" < /dev/null > /data/startup.log 2>&1
+[ "$(grep -c '^startup$' /data/protection-checks)" = 2 ]
+[ "$(head -1 /data/speedtest-times)" = "$(date -d '2026-10-01 09:03:00' +%s)" ]
+[ "$(head -1 /data/rtr-times)" = "$(date -d '2026-10-01 09:06:20' +%s)" ]
 echo 'Run-loop tests passed'
