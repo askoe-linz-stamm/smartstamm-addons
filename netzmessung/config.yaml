@@ -1,5 +1,5 @@
 name: SmartStamm Netzmessung
-version: "2026.10.1.1"
+version: "2026.10.1.2"
 slug: netzmessung
 description: Geplante Internetmessungen mit Speedtest.net und RTR-Netztest als Home-Assistant-Sensoren
 url: https://github.com/askoe-linz-stamm/smartstamm-addons/tree/main/netzmessung

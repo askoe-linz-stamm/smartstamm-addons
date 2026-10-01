@@ -83,9 +83,9 @@ configuration:
   protection:
     name: Streaming und andere Internetnutzung schützen
     description: >-
-      Vor jeder automatischen Messung 60 Sekunden lang die gesamte
-      Internetnutzung am TCL HH515L prüfen. Download und Upload werden
-      addiert und über diese Minute gemittelt.
+      Schon vor dem geplanten Termin drei Minuten lang die gesamte
+      Internetnutzung am TCL HH515L beobachten. Download und Upload werden
+      addiert. Alle drei Minutenmittel müssen unter der Schwelle liegen.
     fields:
       enabled:
         name: Bei beanspruchter Verbindung überspringen
@@ -96,7 +96,7 @@ configuration:
       threshold_mbps:
         name: Schwelle der Internetnutzung in Mbit/s
         description: >-
-          Gemeinsamer Mittelwert von Download und Upload über 60 Sekunden.
+          Schwelle für jedes der drei 60-Sekunden-Fenster aus Download plus Upload.
           Eine niedrigere Schwelle schützt schon bei geringer Nutzung.
           2 Mbit/s ist die Vorgabe und kann an das eigene Streaming angepasst werden.
       router_url:
@@ -117,14 +117,14 @@ configuration:
         name: Nach dem Start des Add-ons messen
         description: >-
           Für jedes aktivierte Messverfahren einmal messen. Bei aktiviertem
-          Schutz wird vor jeder Messung zuerst 60 Sekunden lang die
+          Schutz wird vor jeder Startmessung zuerst drei Minuten lang die
           Internetnutzung geprüft.
       jitter_minutes:
         name: Zufällige Zeitabweichung in Minuten
         description: >-
           Für jeden Termin neu ausgelost. Bei 3 Minuten beginnt der Termin
-          bis zu drei Minuten früher oder später. Bei aktiviertem Schutz beginnt
-          zuerst die 60-Sekunden-Prüfung. 0 bedeutet ohne Abweichung.
+          bis zu drei Minuten früher oder später. Der Verbindungsschutz beobachtet
+          die Nutzung vor diesem Termin. 0 bedeutet ohne Abweichung.
   speedtest_minute:
     name: Bisherige Speedtest-Minute, vor der Umstellung
     description: &legacy_help >-

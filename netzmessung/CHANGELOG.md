@@ -1,3 +1,8 @@
+## 2026.10.1.2
+
+- Connection protection observes traffic before the scheduled test instead of delaying it by the observation. All three consecutive one-minute averages must stay below the threshold.
+- A shared background sampler keeps manual triggers available and skips automatic tests when the full three-minute history is missing or stale. Startup tests observe three minutes each.
+
 ## 2026.10.1.1
 
 - Native Home Assistant configuration with German labels, explanations and separate sections for each measurement, connection protection and general options.

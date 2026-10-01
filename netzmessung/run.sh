@@ -150,30 +150,76 @@ run_rtr() {
   bashio::log.info "RTR-Netztest: down ${down} Mbit/s, up ${up} Mbit/s, ping ${ping_med} ms, ${share}"
 }
 
+# One background sampler serves both schedules, avoiding competing router logins.
+PROTECTION_SNAPSHOT=/tmp/netzmessung-traffic.json
+PROTECTION_PID=""
+protection_stop() {
+  if [ -n "${PROTECTION_PID}" ]; then
+    kill "${PROTECTION_PID}" 2>/dev/null
+    wait "${PROTECTION_PID}" 2>/dev/null
+    PROTECTION_PID=""
+  fi
+  rm -f "${PROTECTION_SNAPSHOT}"
+}
+trap protection_stop EXIT
+
+protection_prepare() { # Start before the three-minute window, allowing login time.
+  [ "${PROTECTION_ENABLED}" = true ] || return 0
+  local now="$1" measurement due needed=false entity name
+  for measurement in speedtest rtr; do
+    due="${SCHEDULE[$measurement.due]}"
+    if [ -n "${due}" ] && [ "$((due - now))" -le 210 ]; then
+      needed=true
+      if [ -z "${SCHEDULE[$measurement.checking]:-}" ]; then
+        if [ "${measurement}" = speedtest ]; then
+          entity=sensor.speedtest_status; name='Speedtest.net Status'
+        else
+          entity=sensor.rtr_netztest_status; name='RTR-Netztest Status'
+        fi
+        set_status "${entity}" "${name}" checking 'Internetnutzung wird vor dem Termin über drei Minuten geprüft'
+        SCHEDULE[$measurement.checking]=true
+      fi
+    fi
+  done
+  if [ "${needed}" = true ]; then
+    if [ -z "${PROTECTION_PID}" ]; then
+      protection_stop
+      python3 "$(dirname "${BASH_SOURCE[0]}")/router.py" monitor "${OPTIONS}" "${PROTECTION_SNAPSHOT}" >/dev/null 2>&1 &
+      PROTECTION_PID=$!
+    fi
+  else
+    protection_stop
+  fi
+}
+
 # Guard only automatic measurements. Manual requests explicitly bypass it.
 # Unknown, missing or incomplete router data must never permit a protected test.
 run_automatic() {
-  local measurement="$1" entity name result rc state average reason message
+  local measurement="$1" mode="${2:-startup}" entity name result rc state average reason message
   if [ "${PROTECTION_ENABLED}" = true ]; then
     if [ "${measurement}" = speedtest ]; then
       entity=sensor.speedtest_status; name='Speedtest.net Status'
     else
       entity=sensor.rtr_netztest_status; name='RTR-Netztest Status'
     fi
-    set_status "${entity}" "${name}" checking 'Internetnutzung wird 60 Sekunden lang geprüft'
-    result=$(python3 "$(dirname "${BASH_SOURCE[0]}")/router.py" "${OPTIONS}" 2>/dev/null); rc=$?
+    if [ "${mode}" = scheduled ]; then
+      result=$(python3 "$(dirname "${BASH_SOURCE[0]}")/router.py" check "${PROTECTION_SNAPSHOT}" "${PROTECTION_THRESHOLD_MBPS}" 2>/dev/null); rc=$?
+    else
+      set_status "${entity}" "${name}" checking 'Internetnutzung wird drei Minuten lang geprüft'
+      result=$(python3 "$(dirname "${BASH_SOURCE[0]}")/router.py" "${OPTIONS}" 2>/dev/null); rc=$?
+    fi
     state=$(jq -r '.state // empty' <<< "${result}" 2>/dev/null)
-    average=$(jq -er '.average_mbps | select(type == "number" and . >= 0)' <<< "${result}" 2>/dev/null)
+    average=$(jq -er '(.window_averages_mbps | max) // .average_mbps | select(type == "number" and . >= 0)' <<< "${result}" 2>/dev/null)
     if [ "${rc}" -ne 0 ] || [ "${state}" != idle ] || [ -z "${average}" ]; then
       if [ "${rc}" = 2 ] && [ "${state}" = busy ] && [ -n "${average}" ]; then
-        message="Messung übersprungen. Internetnutzung ${average} Mbit/s, Schwelle ${PROTECTION_THRESHOLD_MBPS} Mbit/s."
+        message="Messung übersprungen. Internetnutzung ${average} Mbit/s im höchsten Minutenmittel, Schwelle ${PROTECTION_THRESHOLD_MBPS} Mbit/s."
       else
         reason=$(jq -r '.reason // empty' <<< "${result}" 2>/dev/null)
         case "${reason}" in
           router-password-missing) message='Messung übersprungen. Das Routerpasswort fehlt.' ;;
           router-unauthorized) message='Messung übersprungen. Anmeldung am Router fehlgeschlagen.' ;;
           router-unreachable) message='Messung übersprungen. Der Router ist nicht erreichbar.' ;;
-          router-traffic-invalid|router-traffic-stale) message='Messung übersprungen. Keine aktuellen Internetnutzungsdaten vom Router.' ;;
+          router-traffic-invalid|router-traffic-stale|router-traffic-incomplete|router-clock-changed) message='Messung übersprungen. Keine aktuellen Internetnutzungsdaten vom Router.' ;;
           *) message='Messung übersprungen. Die Internetnutzung konnte nicht zuverlässig geprüft werden.' ;;
         esac
       fi
@@ -215,6 +261,7 @@ for measurement in speedtest rtr; do
   [ -n "${SCHEDULE[$measurement.due]}" ] && bashio::log.info "${measurement}: every ${interval} ${unit}; next measurement $(date -d "@${SCHEDULE[$measurement.due]}" -Iseconds)"
 done
 while true; do
+  protection_prepare "$(date +%s)"
   if [ -f /tmp/trigger_speedtest ]; then rm -f /tmp/trigger_speedtest; bashio::log.info "Manual trigger: Speedtest.net"; run_speedtest; fi
   if [ -f /tmp/trigger_rtr ]; then rm -f /tmp/trigger_rtr; bashio::log.info "Manual trigger: RTR-Netztest"; run_rtr; fi
   for measurement in speedtest rtr; do
@@ -222,7 +269,8 @@ while true; do
     if schedule_due "${measurement}" "${now}"; then
       schedule_advance "${measurement}" "${now}" \
         || { bashio::log.error "Cannot advance ${measurement} schedule"; exit 1; }
-      run_automatic "${measurement}"
+      run_automatic "${measurement}" scheduled
+      SCHEDULE[$measurement.checking]=""
       bashio::log.info "${measurement}: next measurement $(date -d "@${SCHEDULE[$measurement.due]}" -Iseconds)"
     fi
   done
