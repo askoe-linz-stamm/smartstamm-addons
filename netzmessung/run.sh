@@ -19,8 +19,8 @@ API="http://supervisor/core/api"
 
 # Measurement clients, downloaded once into /data/bin (see install_clients).
 OOKLA_VERSION=1.2.0
-RMBT_RELEASE=rmbt-client-336e0a8   # Built from open-rmbt-client-cli commit 336e0a81e14ce66a340dab46357e5f3a496333b4
-RMBT_SHA256=41c70ce870d62c6aea8c163001829e0e88e46bc3407d64429471650260d27530
+RMBT_RELEASE=rmbt-client-cf5d85d   # tag in askoe-linz-stamm/smartstamm-addons, built from open-rmbt-client-cli commit cf5d85d5a48d5b70922749b38b799fe185601e11
+RMBT_SHA256=c9b55ca9c956f56dd909ca3f15e1d9322a2d7a793ac59599af6ff8a03e038dbb
 
 # Publish one sensor state. $1 entity id, $2 state, $3 attributes JSON object.
 publish() {
