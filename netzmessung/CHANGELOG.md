@@ -1,3 +1,7 @@
+## 2026.10.10
+
+- Scheduled rebuild: Alpine packages of the base image refreshed (`apk upgrade`), no upstream changes.
+
 ## 2026.10.7
 
 - Scheduled rebuild: Alpine packages of the base image refreshed (`apk upgrade`), no upstream changes.
