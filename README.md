@@ -42,6 +42,8 @@ The workflow **Update netzmessung** (`.github/workflows/update.yaml`, script `.g
 
 The version bump makes the Supervisor (auto-update is enabled for the add-on) rebuild the image on the device, where `apk upgrade` pulls current Alpine packages. Nothing changed: about one minute of runtime; RMBT rebuild: a few minutes. Test the script locally with `DRY_RUN=1 GH_TOKEN=$(gh auth token) .github/scripts/update.sh` (add `FORCE_RMBT_BUILD=1` to exercise the build path); it prints the diff and reverts all uncommitted changes, so commit your own edits first.
 
+Dependabot checks the GitHub Actions of this workflow daily (`.github/dependabot.yml`). The actions are pinned to major tags, so its pull requests are major updates and are merged by hand after review; there is no automatic merge.
+
 ## RMBT client binary
 
 The RTR client is compiled from `rtr-nettest/open-rmbt-client-cli` (`clientRust`, Apache-2.0) at a pinned commit and attached to a release of this repository (`rmbt-client-<commit>`, asset `rmbt-client-aarch64` plus `.sha256`). The update workflow does this automatically; by hand, build it on an arm64 machine with Docker:
