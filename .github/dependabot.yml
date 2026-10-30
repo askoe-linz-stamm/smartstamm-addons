@@ -1,0 +1,20 @@
+# Daily check of the GitHub Actions used by the update workflow. The add-on's base image is
+# not configured here: the Dockerfile takes it from the BUILD_FROM argument, which Dependabot
+# cannot follow, and the Supervisor builds from build.yaml, which update.sh already keeps on the
+# newest 3.x tag. Actions are pinned to major tags, so version updates are major updates and
+# stay open for review; fixes within a major arrive through the moving tag.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+      time: "05:00"
+      timezone: Europe/Vienna
+    cooldown:
+      # Actions only support default-days.
+      default-days: 7
+    groups:
+      routine-updates:
+        patterns: ["*"]
+        update-types: [minor, patch]
