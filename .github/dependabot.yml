@@ -12,9 +12,8 @@ updates:
       time: "05:00"
       timezone: Europe/Vienna
     cooldown:
-      semver-major-days: 30
-      semver-minor-days: 7
-      semver-patch-days: 3
+      # Actions only support default-days.
+      default-days: 7
     groups:
       routine-updates:
         patterns: ["*"]
